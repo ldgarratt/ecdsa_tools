@@ -13,7 +13,6 @@ import (
     // Go wrapper for the bitcoin secp256k1 C library with constant-time curve
     // operations
     "github.com/ethereum/go-ethereum/crypto/secp256k1"
-    "log"
     "strings"
 )
 
@@ -225,25 +224,32 @@ func newPrivFromHex(s string) (ecdsa.PrivateKey, error) {
 }
 
 
-// Note here m is a hash, not the plaintext, I think.
-func recoverSecretKeyFromKnownNonce(r, s, m, nonce string) (*PrivateKey, error) {
+func recoverSecretKeyFromKnownNonceStrings(r, s, m, k string) (*PrivateKey, error) {
+    r_int, _ := new(big.Int).SetString(r, 10)
+    s_int, _ := new(big.Int).SetString(s, 10)
+    m_int, _ := new(big.Int).SetString(m, 10)
+    k_int, _ := new(big.Int).SetString(k, 10)
+    priv, err := recoverSecretKeyFromKnownNonce(r_int, s_int, m_int, k_int)
+    return priv, err
+}
 
+// Note here m is a hash, not the plaintext, I think.
+func recoverSecretKeyFromKnownNonce(r, s, m, k *big.Int) (*PrivateKey, error) {
 	curve := secp256k1.S256()
     curveParams := curve.Params()
-    P := curveParams.P
-    fmt.Println(P)
+    N := curveParams.N
 
-    randomness := strings.NewReader(nonce)
-    fmt.Println(randomness)
+    // Compute (r1_inv * ((k1 * s1) - m1)) % order
+    r_inv := big.NewInt(0)
+    r_inv.ModInverse(r, N)
+    fmt.Println("r_inv: ", r_inv)
 
-    prime := "115792089237316195423570985008687907853269984665640564039457584007908834671663"
-    p_2, _ := new(big.Int).SetString(prime, 10)
-    result := big.NewInt(0)
-    result.ModInverse(result, p_2)
+    priv := big.NewInt(0).Mul(k, s)
+    priv.Sub(priv, m)
+    priv.Mul(priv, r_inv)
+    priv.Mod(priv, N)
 
-    x := big.NewInt(0)
-    y := big.NewInt(0)
-    priv := big.NewInt(0)
+    x, y := curve.ScalarBaseMult(priv.Bytes())
 
 	return &PrivateKey{
 		PublicKey: &PublicKey{
@@ -270,14 +276,6 @@ func copyToString(r io.Reader) (res string, err error) {
 }
 
 func main() {
-    k, err := GenerateKey()
-	if err != nil {
-		panic(err)
-	}
-    fmt.Println(k.PublicKey.Curve.Params())
-	log.Println("key pair has been generated")
-    fmt.Println("hello")
-
 
     var privKey, _ = newPrivFromHex("18E14A7B6A307F426A94F8114701E7C8E774E7F9A47E2C2035DB29A206321725")
     var msg, _ = hex.DecodeString("000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f")
@@ -287,16 +285,6 @@ func main() {
     fmt.Println(r, s, err)
     res := ecdsa.Verify(&privKey.PublicKey, msg, r, s)
     fmt.Println(res)
-
-
-    printPointData(k.PublicKey)
-
-    x := "55066263022277343669578718895168534326250603453777594175500187360389116729240"
-    y := "32670510020758816978083085130507043184471273380659243275938904335757337482424"
-    fmt.Println("Hope this works.\n")
-    pk, _ := NewPublicKeyFromString(x, y)
-    printPointData(pk)
-
 
 
 
@@ -311,18 +299,4 @@ func main() {
 	}
     fmt.Println(entropy)
 
-
-
-
-    r_same, s_1, err := ecdsa.Sign(randomness_used_twice, &privKey, msg)
-    fmt.Println(r_same, s_1, err)
-
-    r_same, s_2, err := ecdsa.Sign(randomness_used_twice, &privKey, msg)
-    fmt.Println(r_same, s_2, err)
-
-    nonce, _ := copyToString(randomness_used_twice)
-
-    p, _ := recoverSecretKeyFromKnownNonce(r.String(), s.String(), "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f", nonce)
-
-    fmt.Println(p)
 }
