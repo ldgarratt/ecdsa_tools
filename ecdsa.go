@@ -20,7 +20,7 @@ import (
 // in the README.
 
 // TODO: make more generic than just using secp256k1.
-// I may have more methods than I need. Consider deleting some.
+// TODO: I may have more methods than I need. Consider deleting some.
 
 type PublicKey struct {
 	Curve elliptic.Curve
@@ -34,7 +34,6 @@ type PrivateKey struct {
 
 func printPointData (pubkey *PublicKey) {
     fmt.Println("Curve : ", pubkey.Curve)
-
     curveParams := pubkey.Curve.Params()
     fmt.Println("P : ", curveParams.P)
     fmt.Println("N : ", curveParams.N)
@@ -223,6 +222,25 @@ func newPrivFromHex(s string) (ecdsa.PrivateKey, error) {
 	}, nil
 }
 
+// Given message hashes m1 and m2 with signatures (r, s1) and (r, s2), i.e
+// repeated r values, this function recovers the private key.
+func recoverSecretKeyFromRepeatNonce(r, s1, s2, m1, m2 *big.Int) (*PrivateKey, error) {
+	curve := secp256k1.S256()
+    curveParams := curve.Params()
+    N := curveParams.N
+
+   // Given identical r values, then:
+   // s1 - s2 = k^(-1)(m+rD) - (k^-1)(m2 + rD)
+   // Thus the nonce k is:
+   // k = (m1 - m2)/(s1 - s2)
+    s12_inv := big.NewInt(0).Sub(s1, s2)
+    s12_inv.ModInverse(s12_inv, N)
+    k := big.NewInt(0).Sub(m1, m2)
+    k.Mul(k, s12_inv)
+
+    priv, err := recoverSecretKeyFromKnownNonce(r, s1, m1, k)
+    return priv, err
+}
 
 func recoverSecretKeyFromKnownNonceStrings(r, s, m, k string) (*PrivateKey, error) {
     r_int, _ := new(big.Int).SetString(r, 10)
@@ -233,7 +251,7 @@ func recoverSecretKeyFromKnownNonceStrings(r, s, m, k string) (*PrivateKey, erro
     return priv, err
 }
 
-// Note here m is a hash, not the plaintext, I think.
+// Note here m is a hash, not the plaintext directly.
 func recoverSecretKeyFromKnownNonce(r, s, m, k *big.Int) (*PrivateKey, error) {
 	curve := secp256k1.S256()
     curveParams := curve.Params()
@@ -263,7 +281,7 @@ func recoverSecretKeyFromKnownNonce(r, s, m, k *big.Int) (*PrivateKey, error) {
 
 // TODO: I actually need an API to create broken ECDSA signatures first...
 /*
-func recoverSecretKeyFromRepeatNonces(r, s1, s2, m1, m2 string) ecdsa.PrivateKey {
+func recoverSecretKeyFromRepeatNonces(r, s1, s2, m1, m2 *big.Int) *PrivateKey {
 }
 */
 
@@ -285,8 +303,6 @@ func main() {
     fmt.Println(r, s, err)
     res := ecdsa.Verify(&privKey.PublicKey, msg, r, s)
     fmt.Println(res)
-
-
 
     // TODO: Just for the purposes of testing, I may need to create the
     // determinsitic version of the ECDSA signature algorithm just to get broken
