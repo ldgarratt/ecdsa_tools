@@ -16,7 +16,9 @@ import (
 
 // TODO: make more generic than just using secp256k1.
 // TODO: Currently assuming the message is the hash already rather than the
-// plaintext which is then hashed.
+// plaintext which is then hashed. I can add functionality for both.
+// TODO: I could later have command line input for that takes arguments r, s, m,
+// etc.
 
 type PublicKey struct {
 	Curve elliptic.Curve
@@ -229,8 +231,6 @@ func RecoverSecretKeyFromRepeatNonce(r, s1, s2, m1, m2 *big.Int) (*PrivateKey, e
     return priv, err
 }
 
-// TODO: Later have command line input which just parses the mode and r, s, m,
-// k, curve strings and just gives the output.
 func RecoverSecretKeyFromKnownNonceStrings(r, s, m, k string) (*PrivateKey, error) {
     r_int, _ := new(big.Int).SetString(r, 10)
     s_int, _ := new(big.Int).SetString(s, 10)

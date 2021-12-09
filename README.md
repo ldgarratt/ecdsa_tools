@@ -1,4 +1,4 @@
-This is a Go API to do various nefarious things with ECDSA signatures.
+This is a Go package to do various nefarious things with ECDSA signatures.
 
 For a given elliptic curve, a base point G of prime order n (i.e., nG == O where
 O is the identity element), a private key d_A with corresponding public key Q_A
@@ -16,7 +16,7 @@ For example:
 
 The main.go file here gives an example of usage.
 
-There are all sorts of attacks of Elliptic curve cryptography so this work is
+There are all sorts of attacks of elliptic curve cryptography so this work is
 far from complete.
 
 Further reading:
