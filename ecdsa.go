@@ -6,21 +6,17 @@ import (
     "crypto/ecdsa"
 	"crypto/rand"
     "encoding/hex"
-    "io"
 	"fmt"
 	"math/big"
     // Golang does not have secp256k1 in crypto/elliptic, so this is a
     // Go wrapper for the bitcoin secp256k1 C library with constant-time curve
     // operations
     "github.com/ethereum/go-ethereum/crypto/secp256k1"
-    "strings"
 )
 
-// TODO: Turn this file just into tools and then have an example main function
-// in the README.
-
 // TODO: make more generic than just using secp256k1.
-// TODO: I may have more methods than I need. Consider deleting some.
+// TODO: Currently assuming the message is the hash already rather than the
+// plaintext which is then hashed.
 
 type PublicKey struct {
 	Curve elliptic.Curve
@@ -60,7 +56,6 @@ func GenerateKey() (*PrivateKey, error) {
 	}, nil
 }
 
-// NewPublicKeyFromHex decodes hex form of public key raw bytes and returns PublicKey instance
 func NewPublicKeyFromHex(s string) (*PublicKey, error) {
 	b, err := hex.DecodeString(s)
 	if err != nil {
@@ -91,8 +86,6 @@ func NewPublicKeyFromString(x, y string) (*PublicKey, error) {
 
 }
 
-// NewPublicKeyFromBytes decodes public key raw bytes and returns PublicKey instance;
-// Supports both compressed and uncompressed public keys
 func NewPublicKeyFromBytes(b []byte) (*PublicKey, error) {
 	curve := secp256k1.S256()
 
@@ -165,9 +158,6 @@ func NewPublicKeyFromBytes(b []byte) (*PublicKey, error) {
 	}
 }
 
-
-// Bytes returns public key raw bytes;
-// Could be optionally compressed by dropping Y part
 func (k *PublicKey) Bytes(compressed bool) []byte {
 	x := k.X.Bytes()
 	if len(x) < 32 {
@@ -196,14 +186,10 @@ func (k *PublicKey) Bytes(compressed bool) []byte {
 	return bytes.Join([][]byte{{0x04}, x, y}, nil)
 }
 
-// Hex returns public key bytes in hex form
 func (k *PublicKey) Hex(compressed bool) string {
 	return hex.EncodeToString(k.Bytes(compressed))
 }
 
-// TODO: note this returns an ecdsa.PrivateKey, not a privatekey as defined in
-// my struct. I should just be consistent.
-// Note this takes in ecdsa.PrivateKey, not the struct I defiend above.
 func newPrivFromHex(s string) (ecdsa.PrivateKey, error) {
 	k, err := hex.DecodeString(s)
 	if err != nil {
@@ -223,8 +209,9 @@ func newPrivFromHex(s string) (ecdsa.PrivateKey, error) {
 }
 
 // Given message hashes m1 and m2 with signatures (r, s1) and (r, s2), i.e
-// repeated r values, this function recovers the private key.
-func recoverSecretKeyFromRepeatNonce(r, s1, s2, m1, m2 *big.Int) (*PrivateKey, error) {
+// repeated r values, this function recovers the private key. Note m1 and m2 are
+// the hashes.
+func RecoverSecretKeyFromRepeatNonce(r, s1, s2, m1, m2 *big.Int) (*PrivateKey, error) {
 	curve := secp256k1.S256()
     curveParams := curve.Params()
     N := curveParams.N
@@ -238,21 +225,23 @@ func recoverSecretKeyFromRepeatNonce(r, s1, s2, m1, m2 *big.Int) (*PrivateKey, e
     k := big.NewInt(0).Sub(m1, m2)
     k.Mul(k, s12_inv)
 
-    priv, err := recoverSecretKeyFromKnownNonce(r, s1, m1, k)
+    priv, err := RecoverSecretKeyFromKnownNonce(r, s1, m1, k)
     return priv, err
 }
 
-func recoverSecretKeyFromKnownNonceStrings(r, s, m, k string) (*PrivateKey, error) {
+// TODO: Later have command line input which just parses the mode and r, s, m,
+// k, curve strings and just gives the output.
+func RecoverSecretKeyFromKnownNonceStrings(r, s, m, k string) (*PrivateKey, error) {
     r_int, _ := new(big.Int).SetString(r, 10)
     s_int, _ := new(big.Int).SetString(s, 10)
     m_int, _ := new(big.Int).SetString(m, 10)
     k_int, _ := new(big.Int).SetString(k, 10)
-    priv, err := recoverSecretKeyFromKnownNonce(r_int, s_int, m_int, k_int)
+    priv, err := RecoverSecretKeyFromKnownNonce(r_int, s_int, m_int, k_int)
     return priv, err
 }
 
 // Note here m is a hash, not the plaintext directly.
-func recoverSecretKeyFromKnownNonce(r, s, m, k *big.Int) (*PrivateKey, error) {
+func RecoverSecretKeyFromKnownNonce(r, s, m, k *big.Int) (*PrivateKey, error) {
 	curve := secp256k1.S256()
     curveParams := curve.Params()
     N := curveParams.N
@@ -277,42 +266,4 @@ func recoverSecretKeyFromKnownNonce(r, s, m, k *big.Int) (*PrivateKey, error) {
 		},
 		D: priv,
 	}, nil
-}
-
-// TODO: I actually need an API to create broken ECDSA signatures first...
-/*
-func recoverSecretKeyFromRepeatNonces(r, s1, s2, m1, m2 *big.Int) *PrivateKey {
-}
-*/
-
-func copyToString(r io.Reader) (res string, err error) {
-    var sb strings.Builder
-    if _, err = io.Copy(&sb, r); err == nil {
-        res = sb.String()
-    }
-    return res, err
-}
-
-func main() {
-
-    var privKey, _ = newPrivFromHex("18E14A7B6A307F426A94F8114701E7C8E774E7F9A47E2C2035DB29A206321725")
-    var msg, _ = hex.DecodeString("000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f")
-    fmt.Println(privKey, msg)
-
-    r, s, err := ecdsa.Sign(rand.Reader, &privKey, msg)
-    fmt.Println(r, s, err)
-    res := ecdsa.Verify(&privKey.PublicKey, msg, r, s)
-    fmt.Println(res)
-
-    // TODO: Just for the purposes of testing, I may need to create the
-    // determinsitic version of the ECDSA signature algorithm just to get broken
-    // two messages with repeated r values, or to know the leaked nonce...
-    entropylen := 32
-    entropy := make([]byte, entropylen)
-    _, err = io.ReadFull(rand.Reader, entropy)
-	if err != nil {
-		panic("Did not retrieve 32 bytes of randomness")
-	}
-    fmt.Println(entropy)
-
 }

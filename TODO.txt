@@ -1,2 +1,0 @@
-1. Write a constant-time implementation of secp256k1. Just copy https://go.dev/src/crypto/elliptic/p256.go, no?
-2. 
