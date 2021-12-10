@@ -13,6 +13,8 @@ For example:
   RecoverSecretKeyFromKnownNonce(r, s, m, k)
 - Given a repeated nonce, we recover the private key, one can recover it with
   RecoverSecretKeyFromRepeatNonce(r, s1, s2, m1, m2)
+- To recover the four possible public keys from a signature (r,s) on m, call
+  recoverPublicKeysFromSignature(r, s, m)
 
 The main.go file here gives an example of usage.
 

@@ -43,3 +43,16 @@ func TestRecoverSecretKeyFromRepeatNonce(t *testing.T) {
     }
 }
 
+func TestRecoverPublictKeyFromSignaturee(t *testing.T) {
+    r, _ := new(big.Int).SetString("e34dc9682d84351326636b4286d5a9afe66a8e84763aa3ae00898b571c5df328", 16)
+    s, _ := new(big.Int).SetString("6d49dfab0ae451bee756751ce92dbad2e9b57204fc1d9d724a841cc4c101005d", 16)
+    m, _ := new(big.Int).SetString("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", 16)
+
+    result, _, _, _ := recoverPublicKeysFromSignature(r, s, m)
+    expected, _ := new(big.Int).SetString("74891158075989181358630104373362359883241131085136557479033021551543981105028", 10)
+
+    if result.X.Cmp(expected) != 0 {
+        t.Errorf("Expecting 6, got: %s", result.X.String())
+    }
+}
+
