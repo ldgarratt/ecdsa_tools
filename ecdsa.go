@@ -20,6 +20,8 @@ import (
 // TODO: I could later have command line input for that takes arguments r, s, m,
 // etc.
 
+// It is a public key, though we can also just consider it as a point on the
+// curve.
 type PublicKey struct {
 	Curve elliptic.Curve
 	X, Y *big.Int
@@ -36,8 +38,9 @@ func printPointData (pubkey *PublicKey) {
     fmt.Println("P : ", curveParams.P)
     fmt.Println("N : ", curveParams.N)
     fmt.Println("B : ", curveParams.B)
-    fmt.Printf("Gx, Gy : %v, %v\n", curveParams.Gx, curveParams.Gy)
+    fmt.Printf("Gx, Gy: %v, %v\n", curveParams.Gx, curveParams.Gy)
     fmt.Println("BitSize : ", curveParams.BitSize)
+    fmt.Println("(Px, Py): ", pubkey.X, pubkey.Y)
 }
 
 func GenerateKey() (*PrivateKey, error) {
@@ -266,4 +269,81 @@ func RecoverSecretKeyFromKnownNonce(r, s, m, k *big.Int) (*PrivateKey, error) {
 		},
 		D: priv,
 	}, nil
+}
+
+func solveEllipticCurveEquationForY(x *big.Int) (y1, y2 *big.Int) {
+    // The equation for secp256k1 is y^2 = x^3 + 7 (mod p). So we can solve for
+    // the two possible values for y.
+	curve := secp256k1.S256()
+    curveParams := curve.Params()
+    P := curveParams.P
+
+    RHS := big.NewInt(0).Exp(x, big.NewInt(3), P)
+    RHS.Add(RHS, big.NewInt(7))
+
+    y1 = big.NewInt(0).ModSqrt(RHS, P)
+    // -Y (mod p) is also a solution.
+    y2 = big.NewInt(0).Sub(P, y1)
+
+    return y1, y2
+}
+
+// r is the X co-ordinate of kG reduced modulo n.
+// Points (X, Y) on the curve are reduced mod p. Since p > n, for any given X
+// (mod n), there are two possible values of X (mod p), namely X (mod n) and
+// (X + n) (mod p) (which might be the same, just different in the case X is
+// very small). Note that for non-specially crafted values, this happens with
+// negligible probability.
+// From these two possible X values, we can derive the two possible Y values
+// from the elliptic curve equation
+func recoverPublicKeysFromSignature(r, s, m *big.Int) (point1, point2, point3, point4 *PublicKey) {
+	curve := secp256k1.S256()
+    curveParams := curve.Params()
+    N := curveParams.N
+    P := curveParams.P
+
+    // P_x1 is one of the two possible x coordinates of P = kG. Other notatation
+    // works the same way.
+    P_x1 := r
+    P_x2 := big.NewInt(0).Add(P_x1, N)
+    P_x2.Mod(P_x2, P)
+
+    // Compute the two possible y coordinates of P for each of the two possible
+    // x coordinates.
+    P_y11, P_y12 := solveEllipticCurveEquationForY(P_x1)
+    P_y21, P_y22 := solveEllipticCurveEquationForY(P_x2)
+
+    // Given P, we compute public key Q as:
+    // Q = r^(-1) * (sP - mG)
+    r_inv := big.NewInt(0)
+    r_inv.ModInverse(r, N)
+    mG_x, mG_y := curve.ScalarBaseMult(m.Bytes())
+
+    // four possiblities for sP:
+    sP_x1, sP_y1 := curve.ScalarMult(P_x1, P_y11, s.Bytes())
+    sP_x2, sP_y2 := curve.ScalarMult(P_x1, P_y12, s.Bytes())
+    sP_x3, sP_y3 := curve.ScalarMult(P_x2, P_y21, s.Bytes())
+    sP_x4, sP_y4 := curve.ScalarMult(P_x2, P_y22, s.Bytes())
+
+    // sP- mG ( -mG is simply changing the Y coordiante to -Y)
+    mG_y.Mul(mG_y, big.NewInt(-1))
+    x1, y1 := curve.Add(sP_x1, sP_y1, mG_x, mG_y)
+    x2, y2 := curve.Add(sP_x2, sP_y2, mG_x, mG_y)
+    x3, y3 := curve.Add(sP_x3, sP_y3, mG_x, mG_y)
+    x4, y4 := curve.Add(sP_x4, sP_y4, mG_x, mG_y)
+
+    // Multiply by r_inv for the four possibilities
+    Qx1, Qy1 := curve.ScalarMult(x1, y1, r_inv.Bytes())
+    Qx2, Qy2 := curve.ScalarMult(x2, y2, r_inv.Bytes())
+    Qx3, Qy3 := curve.ScalarMult(x3, y3, r_inv.Bytes())
+    Qx4, Qy4 := curve.ScalarMult(x4, y4, r_inv.Bytes())
+
+
+    // The four possible resulting public keys Q:
+    pub1 := &PublicKey{curve, Qx1, Qy1}
+    pub2 := &PublicKey{curve, Qx2, Qy2}
+    pub3 := &PublicKey{curve, Qx3, Qy3}
+    pub4 := &PublicKey{curve, Qx4, Qy4}
+
+    return pub1, pub2, pub3, pub4
 }

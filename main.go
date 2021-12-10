@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"math/big"
+    "crypto/ecdsa"
+    "crypto/rand"
 )
 
 // This is an example main function to e.g., recover private key from known
@@ -19,6 +21,37 @@ func main() {
     fmt.Println("Private key:\n", result.D)
     fmt.Println("Public key data:")
     printPointData(result.PublicKey)
+
+    fmt.Println()
+    fmt.Println()
+    a, b, c, d := recoverPublicKeysFromSignature(r, s, m)
+    printPointData(a)
+    fmt.Println()
+    printPointData(b)
+    fmt.Println()
+    printPointData(c)
+    fmt.Println()
+    printPointData(d)
+
+    fmt.Println()
+    fmt.Println()
+    fmt.Println()
+    mm := m.Bytes()
+    ecdsa_a := ecdsa.PublicKey{a.Curve, a.X, a.Y}
+    fmt.Println(ecdsa_a)
+    pub := ecdsa.PublicKey{result.PublicKey.Curve, result.PublicKey.X, result.PublicKey.Y}
+    pub_mine := PublicKey{result.PublicKey.Curve, result.PublicKey.X, result.PublicKey.Y}
+    printPointData(&pub_mine)
+    fmt.Println("hello")
+    res2 := ecdsa.Verify(&ecdsa_a, mm, r, s)
+    fmt.Println(res2)
+
+    result2 := ecdsa.PrivateKey{pub, result.D}
+    q, z, err := ecdsa.Sign(rand.Reader, &result2, mm)
+    fmt.Println(q, z, err)
+    res := ecdsa.Verify(&result2.PublicKey, mm, r, s)
+    fmt.Println(res)
+
 
 }
 
